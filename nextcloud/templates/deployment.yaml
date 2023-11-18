@@ -1,0 +1,172 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nextcloud
+  labels:
+    app: nextcloud
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: nextcloud
+  template:
+    metadata:
+      labels:
+        app: nextcloud
+    spec:
+      containers:
+        - env:
+            - name: MYSQL_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  key: MYSQL_DATABASE
+                  name: mariadb-secrets
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: MYSQL_PASSWORD
+                  name: mariadb-secrets
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  key: MYSQL_USER
+                  name: mariadb-secrets
+          image: {{ .Values.nextcloud.image.repository}}:{{.Values.nextcloud.image.tag | default .Chart.AppVersion }}
+          imagePullPolicy: {{ .Values.nextcloud.image.pullPolicy }}
+          name: nextcloud
+          ports:
+            - containerPort: 80
+              protocol: TCP
+          resources: { }
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /var/www/html
+              name: nextcloud-data
+        - command:
+            - /cron.sh
+          env:
+            - name: MYSQL_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  key: MYSQL_DATABASE
+                  name: mariadb-secrets
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: MYSQL_PASSWORD
+                  name: mariadb-secrets
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  key: MYSQL_USER
+                  name: mariadb-secrets
+          image: {{ .Values.nextcloud.image.repository}}:{{.Values.nextcloud.image.tag | default .Chart.AppVersion }}
+          imagePullPolicy: {{ .Values.nextcloud.image.pullPolicy }}
+          name: nextcloud-cron
+          resources: { }
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /var/www/html
+              name: nextcloud-data
+        - args:
+            - --transaction-isolation=READ-COMMITTED
+            - --binlog-format=ROW
+            - --max-connections=1000
+          env:
+            - name: MYSQL_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  key: MYSQL_DATABASE
+                  name: mariadb-secrets
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: MYSQL_PASSWORD
+                  name: mariadb-secrets
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  key: MYSQL_USER
+                  name: mariadb-secrets
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: MYSQL_ROOT_PASSWORD
+                  name: mariadb-secrets
+          image: {{ .Values.mariadb.image.repository }}:{{ .Values.mariadb.image.tag }}
+          imagePullPolicy: {{ .Values.mariadb.image.pullPolicy }}
+          name: mariadb
+          ports:
+            - containerPort: 3306
+              protocol: TCP
+          resources: { }
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /var/lib/mysql
+              name: mariadb-data
+        - command:
+            - redis-server
+            - /redis-master/redis.conf
+            - --requirepass myredispass
+          env:
+            - name: MASTER
+              value: "true"
+          image: {{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}
+          imagePullPolicy: {{ .Values.redis.image.pullPolicy }}
+          name: redis
+          ports:
+            - containerPort: 6379
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 100m
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /redis-master-data
+              name: redis-data
+            - mountPath: /redis-master
+              name: redis-config
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - hostPath:
+            path: {{ .Values.nextcloud.data.db }}
+            type: Directory
+          name: mariadb-data
+        - hostPath:
+            path: {{ .Values.nextcloud.data.nextcloud }}
+            type: Directory
+          name: nextcloud-data
+        - emptyDir: { }
+          name: redis-data
+        - configMap:
+            defaultMode: 420
+            items:
+              - key: redis-config
+                path: redis.conf
+            name: redis-config
+          name: redis-config
+        - configMap:
+            defaultMode: 420
+            name: apache-config
+          name: apache-config
+
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
