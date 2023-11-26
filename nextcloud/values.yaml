@@ -8,7 +8,7 @@ nextcloud:
   image:
     repository: nextcloud
     pullPolicy: IfNotPresent
-    tag: "27.1.3"
+    tag: 27.1.3
   data:
     nextcloud: /my/awesome/nextcloud/folder
     db: /my/awesome/db/folder
@@ -16,12 +16,12 @@ redis:
   image:
     repository: redis
     pullPolicy: IfNotPresent
-    tag: "7.0.8"
+    tag: 7.0.8
 mariadb:
   image:
     repository: mariadb
     pullPolicy: IfNotPresent
-    tag: "10.5.11"
+    tag: 10.5.11
   env:
     database: nextcloud
     user: nextcloud

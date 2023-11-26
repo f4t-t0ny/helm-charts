@@ -15,7 +15,8 @@ spec:
         app: nextcloud
     spec:
       containers:
-        - env:
+        - name: nextcloud
+          env:
             - name: MYSQL_DATABASE
               valueFrom:
                 secretKeyRef:
@@ -33,17 +34,14 @@ spec:
                   name: mariadb-secrets
           image: {{ .Values.nextcloud.image.repository}}:{{.Values.nextcloud.image.tag | default .Chart.AppVersion }}
           imagePullPolicy: {{ .Values.nextcloud.image.pullPolicy }}
-          name: nextcloud
           ports:
             - containerPort: 80
               protocol: TCP
-          resources: { }
-          terminationMessagePath: /dev/termination-log
-          terminationMessagePolicy: File
           volumeMounts:
             - mountPath: /var/www/html
               name: nextcloud-data
-        - command:
+        - name: nextcloud-cron
+          command:
             - /cron.sh
           env:
             - name: MYSQL_DATABASE
@@ -63,14 +61,21 @@ spec:
                   name: mariadb-secrets
           image: {{ .Values.nextcloud.image.repository}}:{{.Values.nextcloud.image.tag | default .Chart.AppVersion }}
           imagePullPolicy: {{ .Values.nextcloud.image.pullPolicy }}
-          name: nextcloud-cron
-          resources: { }
-          terminationMessagePath: /dev/termination-log
-          terminationMessagePolicy: File
           volumeMounts:
             - mountPath: /var/www/html
               name: nextcloud-data
-        - args:
+        - name: nextcloud-logs
+          command:
+            - "/bin/sh"
+            - "-c"
+            - "tail -f /var/www/html/data/nextcloud.log | jq"
+          image: aw1986/ubuntu:22.04
+          imagePullPolicy: {{ .Values.nextcloud.image.pullPolicy }}
+          volumeMounts:
+            - mountPath: /var/www/html
+              name: nextcloud-data
+        - name: mariadb
+          args:
             - --transaction-isolation=READ-COMMITTED
             - --binlog-format=ROW
             - --max-connections=1000
@@ -97,17 +102,14 @@ spec:
                   name: mariadb-secrets
           image: {{ .Values.mariadb.image.repository }}:{{ .Values.mariadb.image.tag }}
           imagePullPolicy: {{ .Values.mariadb.image.pullPolicy }}
-          name: mariadb
           ports:
             - containerPort: 3306
               protocol: TCP
-          resources: { }
-          terminationMessagePath: /dev/termination-log
-          terminationMessagePolicy: File
           volumeMounts:
             - mountPath: /var/lib/mysql
               name: mariadb-data
-        - command:
+        - name: redis
+          command:
             - redis-server
             - /redis-master/redis.conf
             - --requirepass myredispass
@@ -116,7 +118,6 @@ spec:
               value: "true"
           image: {{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}
           imagePullPolicy: {{ .Values.redis.image.pullPolicy }}
-          name: redis
           ports:
             - containerPort: 6379
               protocol: TCP
@@ -130,10 +131,6 @@ spec:
               name: redis-data
             - mountPath: /redis-master
               name: redis-config
-      dnsPolicy: ClusterFirst
-      restartPolicy: Always
-      schedulerName: default-scheduler
-      terminationGracePeriodSeconds: 30
       volumes:
         - hostPath:
             path: {{ .Values.nextcloud.data.db }}
@@ -156,17 +153,3 @@ spec:
             defaultMode: 420
             name: apache-config
           name: apache-config
-
-
-      {{- with .Values.nodeSelector }}
-      nodeSelector:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.affinity }}
-      affinity:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.tolerations }}
-      tolerations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
